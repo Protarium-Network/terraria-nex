@@ -12,9 +12,15 @@ const (
 	GameServerID = "10198F00"
 	AccessKey    = "3d37fbdb"
 
+	// The NEX version used by the NEX game can be found in the RPX file
+	// 009a1159 5b 53 44        ds         "[SDK+Nintendo:NEX_3_8_3]"
+	// 4b 2b 4e
+	// 69 6e 74
+	// 009a1174 00              ??         00h
 	NEXMajor = 3
 	NEXMinor = 8
 	NEXPatch = 3
 )
 
+// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
 var LegacyConnectionSignature = false

@@ -9,8 +9,7 @@ import (
 var Logger *plogger.Logger
 
 // KerberosPassword is the shared secret for the Quazal Authentication /
-// Rendez-Vous system accounts (PIDs 1 and 2). Overridden by
-// PN_MN9_KERBEROS_PASSWORD.
+// Rendez-Vous system accounts (PIDs 1 and 2).
 var KerberosPassword = "password"
 
 // NEXTokenAESKey is the AES-256 key an external account server uses to seal

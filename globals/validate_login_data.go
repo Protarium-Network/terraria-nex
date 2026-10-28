@@ -43,7 +43,7 @@ func ValidatePretendoLoginData(pid types.PID, loginData types.DataHolder, aesKey
 		tokenBase64 = strings.Replace(tokenBase64, ".", "+", -1)
 		tokenBase64 = strings.Replace(tokenBase64, "-", "/", -1)
 		tokenBase64 = strings.Replace(tokenBase64, "*", "=", -1)
-	case "AuthenticationInfo": // * 3DS / Wii U
+	case "AuthenticationInfo": // * Both
 		authenticationInfo := loginData.Object.Copy().(ticket_granting_types.AuthenticationInfo)
 
 		tokenBase64 = string(authenticationInfo.Token)

@@ -32,7 +32,7 @@ var SecureEndpoint *nexgo.PRUDPEndPoint
 func StartSecureServer() {
 	dsn := os.Getenv("PN_TRA_POSTGRES_URI")
 	if dsn == "" {
-		dsn = "postgres://admin:password123@127.0.0.1/terraria?sslmode=disable"
+		dsn = "postgres://admin:password@localhost/terraria?sslmode=disable"
 	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -67,11 +67,11 @@ func StartSecureServer() {
 	SecureEndpoint.OnData(func(packet nexgo.PacketInterface) {
 		request := packet.RMCMessage()
 		if request == nil {
-			fmt.Printf("[TRA Secure] type=%T\n", packet)
+			fmt.Printf("[TRA Secure] Type=%T\n", packet)
 			return
 		}
-		fmt.Printf("[TRA Secure] PID=%d proto=0x%02X method=0x%02X callID=%d paramsLen=%d\n",
-			uint64(packet.Sender().PID()), request.ProtocolID, request.MethodID, request.CallID, len(request.Parameters))
+		fmt.Printf("[TRA Secure] PID=%d ProtocolID=%s (0x%02X) MethodID=0x%02X CallID=%d ParamsLen=%d\n",
+			uint64(packet.Sender().PID()), globals.GetProtocolNameByID(request.ProtocolID), request.ProtocolID, request.MethodID, request.CallID, len(request.Parameters))
 	})
 
 	SecureEndpoint.OnConnectionEnded(func(connection *nexgo.PRUDPConnection) {
@@ -79,7 +79,7 @@ func StartSecureServer() {
 	})
 
 	SecureEndpoint.OnError(func(err *nexgo.Error) {
-		globals.Logger.Errorf("[TRA Secure] code=%d msg=%s", err.ResultCode, err.Message)
+		globals.Logger.Errorf("[TRA Secure] ResultCode=%d Message=%s", err.ResultCode, err.Message)
 	})
 
 	matchmakingManager := common_globals.NewMatchmakingManager(SecureEndpoint, db)

@@ -20,7 +20,7 @@ func StartAuthenticationServer() {
 	AuthenticationServer = nex.NewPRUDPServer()
 
 	// Wrong value = 106-0502 / endless CONNECT retransmit. Most 3.4.13 titles
-	// on this stack need false; flip with PN_WO3_LEGACY_SIGNATURE=1.
+	// on this stack need false; flip with =1.
 	// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
 	AuthenticationServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
