@@ -83,7 +83,17 @@ func StartSecureServer() {
 	})
 
 	matchmakingManager := common_globals.NewMatchmakingManager(SecureEndpoint, db)
-	matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 { return []uint32{} }
+	//matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 { return []uint32{} }
+	matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 {
+		pids := make([]uint32, 0)
+		SecureEndpoint.Connections.Each(func(_ string, c *nexgo.PRUDPConnection) bool {
+			if other := uint32(c.PID()); other != pid {
+				pids = append(pids, other)
+			}
+			return false
+		})
+		return pids
+	}
 
 	globals.UtilityManager = common_globals.NewUtilityManager(SecureEndpoint, db)
 
