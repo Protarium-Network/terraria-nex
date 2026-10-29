@@ -12,4 +12,4 @@ same stack as this org's other servers.
 |-----------------|-------|
 | Game server ID  | `10198F00` |
 | Access key      | `3d37fbdb` |
-| NEX SDK version | `3.8.3` |
+| NEX Library version | `3.8.3` |
