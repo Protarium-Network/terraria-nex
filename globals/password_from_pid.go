@@ -48,7 +48,7 @@ type settingsJSON struct {
 }
 
 func passwordFromPIDLocal(pid types.PID) (string, uint32) {
-	path := os.Getenv("PN_NAN_SETTINGS_PATH")
+	path := os.Getenv("PN_TRA_SETTINGS_PATH")
 	if path == "" {
 		path = "settings.json"
 	}
