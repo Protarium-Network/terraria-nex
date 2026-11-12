@@ -1,7 +1,6 @@
 package nex
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
@@ -23,48 +22,33 @@ import (
 	utility "github.com/PretendoNetwork/nex-protocols-go/v2/utility"
 	_ "github.com/lib/pq"
 
+	"github.com/Protarium-Network/terraria-nex/database"
 	"github.com/Protarium-Network/terraria-nex/globals"
 )
 
-var SecureServer *nexgo.PRUDPServer
-var SecureEndpoint *nexgo.PRUDPEndPoint
-
 func StartSecureServer() {
-	dsn := os.Getenv("PN_TRA_POSTGRES_URI")
-	if dsn == "" {
-		dsn = "postgres://admin:password@localhost/terraria?sslmode=disable"
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		panic(err)
-	}
-	if err = db.Ping(); err != nil {
-		panic(err)
-	}
-
-	SecureServer = nexgo.NewPRUDPServer()
+	globals.SecureServer = nexgo.NewPRUDPServer()
 
 	// Wrong value = 106-0502 / endless CONNECT retransmit.
 	// LegacyConnectionSignature are only used if the NEX version is lower than 3.2.0.
 	// Terraria is NEX 3.8.3, so it must be false.
-	SecureServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
+	globals.SecureServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
-	SecureServer.LibraryVersions.SetDefault(nexgo.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
-	SecureServer.AccessKey = globals.AccessKey
+	globals.SecureServer.LibraryVersions.SetDefault(nexgo.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
+	globals.SecureServer.AccessKey = globals.AccessKey
 
 	// StructureHeaders are used by NEX 3.5.0 and newer (Terraria is 3.8.3).
-	SecureServer.ByteStreamSettings.UseStructureHeader = true
+	globals.SecureServer.ByteStreamSettings.UseStructureHeader = true
 
-	SecureEndpoint = nexgo.NewPRUDPEndPoint(1)
-	SecureEndpoint.IsSecureEndPoint = true
-	SecureEndpoint.ServerAccount = globals.SecureServerAccount
-	SecureEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
-	SecureEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
+	globals.SecureEndpoint = nexgo.NewPRUDPEndPoint(1)
+	globals.SecureEndpoint.IsSecureEndPoint = true
+	globals.SecureEndpoint.ServerAccount = globals.SecureServerAccount
+	globals.SecureEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
+	globals.SecureEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
 
-	SecureServer.BindPRUDPEndPoint(SecureEndpoint)
-	globals.SecureEndpoint = SecureEndpoint
+	globals.SecureServer.BindPRUDPEndPoint(globals.SecureEndpoint)
 
-	SecureEndpoint.OnData(func(packet nexgo.PacketInterface) {
+	globals.SecureEndpoint.OnData(func(packet nexgo.PacketInterface) {
 		request := packet.RMCMessage()
 		if request == nil {
 			fmt.Printf("[TRA Secure] Type=%T\n", packet)
@@ -74,45 +58,47 @@ func StartSecureServer() {
 			uint64(packet.Sender().PID()), globals.GetProtocolNameByID(request.ProtocolID), request.ProtocolID, request.MethodID, request.CallID, len(request.Parameters))
 	})
 
-	SecureEndpoint.OnConnectionEnded(func(connection *nexgo.PRUDPConnection) {
+	globals.SecureEndpoint.OnConnectionEnded(func(connection *nexgo.PRUDPConnection) {
 		fmt.Printf("[TRA Secure] PID=%d disconnected\n", uint64(connection.PID()))
 	})
 
-	SecureEndpoint.OnError(func(err *nexgo.Error) {
+	globals.SecureEndpoint.OnError(func(err *nexgo.Error) {
 		globals.Logger.Errorf("[TRA Secure] ResultCode=%d Message=%s", err.ResultCode, err.Message)
 	})
 
-	globals.MatchmakingManager = common_globals.NewMatchmakingManager(SecureEndpoint, db)
+	globals.MatchmakingManager = common_globals.NewMatchmakingManager(globals.SecureEndpoint, database.Postgres)
 	globals.MatchmakingManager.GetUserFriendPIDs = globals.GetUserFriendPIDs
 
-	globals.UtilityManager = common_globals.NewUtilityManager(SecureEndpoint, db)
+	globals.UtilityManager = common_globals.NewUtilityManager(globals.SecureEndpoint, database.Postgres)
 
 	secureProtocol := secure.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(secureProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(secureProtocol)
 	commonSecureProtocol := commonsecure.NewCommonProtocol(secureProtocol)
 	commonSecureProtocol.EnableInsecureRegister()
-	commonSecureProtocol.CreateReportDBRecord = func(_ types.PID, _ types.UInt32, _ types.QBuffer) error {
+	commonSecureProtocol.CreateReportDBRecord = func(PID types.PID, ReportID types.UInt32, ReportData types.QBuffer) error {
+		globals.Logger.Warningf("[TRA Secure] Player report from PID %d (report ID %d, %d bytes) discarded: this server does not store reports",
+			PID, ReportID, len(ReportData))
 		return nil
 	}
 
 	natTraversalProtocol := nattraversal.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(natTraversalProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(natTraversalProtocol)
 	commonnattraversal.NewCommonProtocol(natTraversalProtocol)
 
 	matchMakingProtocol := matchmaking.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchMakingProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchMakingProtocol)
 	commonmatchmaking.NewCommonProtocol(matchMakingProtocol).SetManager(globals.MatchmakingManager)
 
 	matchMakingExtProtocol := matchmakingext.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchMakingExtProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchMakingExtProtocol)
 	commonmatchmakingext.NewCommonProtocol(matchMakingExtProtocol).SetManager(globals.MatchmakingManager)
 
 	matchmakeExtensionProtocol := matchmakeextension.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchmakeExtensionProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchmakeExtensionProtocol)
 	commonmatchmakeextension.NewCommonProtocol(matchmakeExtensionProtocol).SetManager(globals.MatchmakingManager)
 
 	utilityProtocol := utility.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(utilityProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(utilityProtocol)
 	commonutility.NewCommonProtocol(utilityProtocol).SetManager(globals.UtilityManager)
 
 	port, err := strconv.Atoi(os.Getenv("PN_TRA_SECURE_PORT"))
@@ -121,5 +107,5 @@ func StartSecureServer() {
 	}
 
 	globals.Logger.Successf("[TRA] Secure server listening on UDP %d", port)
-	SecureServer.Listen(port)
+	globals.SecureServer.Listen(port)
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/PretendoNetwork/plogger-go"
 
+	"github.com/Protarium-Network/terraria-nex/database"
 	"github.com/Protarium-Network/terraria-nex/globals"
 )
 
@@ -66,4 +67,6 @@ func init() {
 	requiredPort("PN_TRA_AUTH_PORT")
 	requiredPort("PN_TRA_SECURE_PORT")
 	requiredEnv("PN_TRA_SECURE_HOST")
+
+	database.ConnectPostgres()
 }
