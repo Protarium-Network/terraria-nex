@@ -44,15 +44,15 @@ func StartSecureServer() {
 
 	SecureServer = nexgo.NewPRUDPServer()
 
-	// Wrong value = 106-0502 / endless CONNECT retransmit. Most 3.4.13 titles
-	// on this stack need false; flip with PN_WO3_LEGACY_SIGNATURE=1.
-	// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
+	// Wrong value = 106-0502 / endless CONNECT retransmit.
+	// LegacyConnectionSignature are only used if the NEX version is lower than 3.2.0.
+	// Terraria is NEX 3.8.3, so it must be false.
 	SecureServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
 	SecureServer.LibraryVersions.SetDefault(nexgo.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
 	SecureServer.AccessKey = globals.AccessKey
 
-	// UseStructureHeader=True if the NEX version is lower than 3.3.0
+	// StructureHeaders are used by NEX 3.5.0 and newer (Terraria is 3.8.3).
 	SecureServer.ByteStreamSettings.UseStructureHeader = true
 
 	SecureEndpoint = nexgo.NewPRUDPEndPoint(1)
@@ -82,18 +82,8 @@ func StartSecureServer() {
 		globals.Logger.Errorf("[TRA Secure] ResultCode=%d Message=%s", err.ResultCode, err.Message)
 	})
 
-	matchmakingManager := common_globals.NewMatchmakingManager(SecureEndpoint, db)
-	//matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 { return []uint32{} }
-	matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 {
-		pids := make([]uint32, 0)
-		SecureEndpoint.Connections.Each(func(_ string, c *nexgo.PRUDPConnection) bool {
-			if other := uint32(c.PID()); other != pid {
-				pids = append(pids, other)
-			}
-			return false
-		})
-		return pids
-	}
+	globals.MatchmakingManager = common_globals.NewMatchmakingManager(SecureEndpoint, db)
+	globals.MatchmakingManager.GetUserFriendPIDs = globals.GetUserFriendPIDs
 
 	globals.UtilityManager = common_globals.NewUtilityManager(SecureEndpoint, db)
 
@@ -111,15 +101,15 @@ func StartSecureServer() {
 
 	matchMakingProtocol := matchmaking.NewProtocol()
 	SecureEndpoint.RegisterServiceProtocol(matchMakingProtocol)
-	commonmatchmaking.NewCommonProtocol(matchMakingProtocol).SetManager(matchmakingManager)
+	commonmatchmaking.NewCommonProtocol(matchMakingProtocol).SetManager(globals.MatchmakingManager)
 
 	matchMakingExtProtocol := matchmakingext.NewProtocol()
 	SecureEndpoint.RegisterServiceProtocol(matchMakingExtProtocol)
-	commonmatchmakingext.NewCommonProtocol(matchMakingExtProtocol).SetManager(matchmakingManager)
+	commonmatchmakingext.NewCommonProtocol(matchMakingExtProtocol).SetManager(globals.MatchmakingManager)
 
 	matchmakeExtensionProtocol := matchmakeextension.NewProtocol()
 	SecureEndpoint.RegisterServiceProtocol(matchmakeExtensionProtocol)
-	commonmatchmakeextension.NewCommonProtocol(matchmakeExtensionProtocol).SetManager(matchmakingManager)
+	commonmatchmakeextension.NewCommonProtocol(matchmakeExtensionProtocol).SetManager(globals.MatchmakingManager)
 
 	utilityProtocol := utility.NewProtocol()
 	SecureEndpoint.RegisterServiceProtocol(utilityProtocol)

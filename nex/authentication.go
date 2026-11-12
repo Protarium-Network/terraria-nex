@@ -19,9 +19,9 @@ var AuthenticationEndpoint *nex.PRUDPEndPoint
 func StartAuthenticationServer() {
 	AuthenticationServer = nex.NewPRUDPServer()
 
-	// Wrong value = 106-0502 / endless CONNECT retransmit. Most 3.4.13 titles
-	// on this stack need false; flip with =1.
-	// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
+	// Wrong value = 106-0502 / endless CONNECT retransmit.
+	// LegacyConnectionSignature are only used if the NEX version is lower than 3.2.0.
+	// Terraria is NEX 3.8.3, so it must be false.
 	AuthenticationServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
 	AuthenticationEndpoint = nex.NewPRUDPEndPoint(1)
@@ -33,7 +33,7 @@ func StartAuthenticationServer() {
 	AuthenticationServer.LibraryVersions.SetDefault(nex.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
 	AuthenticationServer.AccessKey = globals.AccessKey
 
-	// UseStructureHeader=True if the NEX version is lower than 3.3.0
+	// StructureHeaders are used by NEX 3.5.0 and newer (Terraria is 3.8.3).
 	AuthenticationServer.ByteStreamSettings.UseStructureHeader = true
 
 	AuthenticationEndpoint.OnData(func(packet nex.PacketInterface) {
