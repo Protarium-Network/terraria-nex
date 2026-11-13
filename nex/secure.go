@@ -1,7 +1,6 @@
 package nex
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
@@ -23,48 +22,33 @@ import (
 	utility "github.com/PretendoNetwork/nex-protocols-go/v2/utility"
 	_ "github.com/lib/pq"
 
+	"github.com/Protarium-Network/terraria-nex/database"
 	"github.com/Protarium-Network/terraria-nex/globals"
 )
 
-var SecureServer *nexgo.PRUDPServer
-var SecureEndpoint *nexgo.PRUDPEndPoint
-
 func StartSecureServer() {
-	dsn := os.Getenv("PN_TRA_POSTGRES_URI")
-	if dsn == "" {
-		dsn = "postgres://admin:password@localhost/terraria?sslmode=disable"
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		panic(err)
-	}
-	if err = db.Ping(); err != nil {
-		panic(err)
-	}
+	globals.SecureServer = nexgo.NewPRUDPServer()
 
-	SecureServer = nexgo.NewPRUDPServer()
+	// Wrong value = 106-0502 / endless CONNECT retransmit.
+	// LegacyConnectionSignature are only used if the NEX version is lower than 3.2.0.
+	// Terraria is NEX 3.8.3, so it must be false.
+	globals.SecureServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
-	// Wrong value = 106-0502 / endless CONNECT retransmit. Most 3.4.13 titles
-	// on this stack need false; flip with PN_WO3_LEGACY_SIGNATURE=1.
-	// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
-	SecureServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
+	globals.SecureServer.LibraryVersions.SetDefault(nexgo.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
+	globals.SecureServer.AccessKey = globals.AccessKey
 
-	SecureServer.LibraryVersions.SetDefault(nexgo.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
-	SecureServer.AccessKey = globals.AccessKey
+	// StructureHeaders are used by NEX 3.5.0 and newer (Terraria is 3.8.3).
+	globals.SecureServer.ByteStreamSettings.UseStructureHeader = true
 
-	// UseStructureHeader=True if the NEX version is lower than 3.3.0
-	SecureServer.ByteStreamSettings.UseStructureHeader = true
+	globals.SecureEndpoint = nexgo.NewPRUDPEndPoint(1)
+	globals.SecureEndpoint.IsSecureEndPoint = true
+	globals.SecureEndpoint.ServerAccount = globals.SecureServerAccount
+	globals.SecureEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
+	globals.SecureEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
 
-	SecureEndpoint = nexgo.NewPRUDPEndPoint(1)
-	SecureEndpoint.IsSecureEndPoint = true
-	SecureEndpoint.ServerAccount = globals.SecureServerAccount
-	SecureEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
-	SecureEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
+	globals.SecureServer.BindPRUDPEndPoint(globals.SecureEndpoint)
 
-	SecureServer.BindPRUDPEndPoint(SecureEndpoint)
-	globals.SecureEndpoint = SecureEndpoint
-
-	SecureEndpoint.OnData(func(packet nexgo.PacketInterface) {
+	globals.SecureEndpoint.OnData(func(packet nexgo.PacketInterface) {
 		request := packet.RMCMessage()
 		if request == nil {
 			fmt.Printf("[TRA Secure] Type=%T\n", packet)
@@ -74,19 +58,19 @@ func StartSecureServer() {
 			uint64(packet.Sender().PID()), globals.GetProtocolNameByID(request.ProtocolID), request.ProtocolID, request.MethodID, request.CallID, len(request.Parameters))
 	})
 
-	SecureEndpoint.OnConnectionEnded(func(connection *nexgo.PRUDPConnection) {
+	globals.SecureEndpoint.OnConnectionEnded(func(connection *nexgo.PRUDPConnection) {
 		fmt.Printf("[TRA Secure] PID=%d disconnected\n", uint64(connection.PID()))
 	})
 
-	SecureEndpoint.OnError(func(err *nexgo.Error) {
+	globals.SecureEndpoint.OnError(func(err *nexgo.Error) {
 		globals.Logger.Errorf("[TRA Secure] ResultCode=%d Message=%s", err.ResultCode, err.Message)
 	})
 
-	matchmakingManager := common_globals.NewMatchmakingManager(SecureEndpoint, db)
-	//matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 { return []uint32{} }
-	matchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 {
+	globals.MatchmakingManager = common_globals.NewMatchmakingManager(globals.SecureEndpoint, database.Postgres)
+	//globals.MatchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 { return []uint32{} } // empty list
+	globals.MatchmakingManager.GetUserFriendPIDs = func(pid uint32) []uint32 {
 		pids := make([]uint32, 0)
-		SecureEndpoint.Connections.Each(func(_ string, c *nexgo.PRUDPConnection) bool {
+		globals.SecureEndpoint.Connections.Each(func(_ string, c *nexgo.PRUDPConnection) bool {
 			if other := uint32(c.PID()); other != pid {
 				pids = append(pids, other)
 			}
@@ -95,34 +79,36 @@ func StartSecureServer() {
 		return pids
 	}
 
-	globals.UtilityManager = common_globals.NewUtilityManager(SecureEndpoint, db)
+	globals.UtilityManager = common_globals.NewUtilityManager(globals.SecureEndpoint, database.Postgres)
 
 	secureProtocol := secure.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(secureProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(secureProtocol)
 	commonSecureProtocol := commonsecure.NewCommonProtocol(secureProtocol)
 	commonSecureProtocol.EnableInsecureRegister()
-	commonSecureProtocol.CreateReportDBRecord = func(_ types.PID, _ types.UInt32, _ types.QBuffer) error {
+	commonSecureProtocol.CreateReportDBRecord = func(PID types.PID, ReportID types.UInt32, ReportData types.QBuffer) error {
+		globals.Logger.Warningf("[TRA] Player report from PID %d (report ID %d, %d bytes) discarded: this server does not store reports",
+			PID, ReportID, len(ReportData))
 		return nil
 	}
 
 	natTraversalProtocol := nattraversal.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(natTraversalProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(natTraversalProtocol)
 	commonnattraversal.NewCommonProtocol(natTraversalProtocol)
 
 	matchMakingProtocol := matchmaking.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchMakingProtocol)
-	commonmatchmaking.NewCommonProtocol(matchMakingProtocol).SetManager(matchmakingManager)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchMakingProtocol)
+	commonmatchmaking.NewCommonProtocol(matchMakingProtocol).SetManager(globals.MatchmakingManager)
 
 	matchMakingExtProtocol := matchmakingext.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchMakingExtProtocol)
-	commonmatchmakingext.NewCommonProtocol(matchMakingExtProtocol).SetManager(matchmakingManager)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchMakingExtProtocol)
+	commonmatchmakingext.NewCommonProtocol(matchMakingExtProtocol).SetManager(globals.MatchmakingManager)
 
 	matchmakeExtensionProtocol := matchmakeextension.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(matchmakeExtensionProtocol)
-	commonmatchmakeextension.NewCommonProtocol(matchmakeExtensionProtocol).SetManager(matchmakingManager)
+	globals.SecureEndpoint.RegisterServiceProtocol(matchmakeExtensionProtocol)
+	commonmatchmakeextension.NewCommonProtocol(matchmakeExtensionProtocol).SetManager(globals.MatchmakingManager)
 
 	utilityProtocol := utility.NewProtocol()
-	SecureEndpoint.RegisterServiceProtocol(utilityProtocol)
+	globals.SecureEndpoint.RegisterServiceProtocol(utilityProtocol)
 	commonutility.NewCommonProtocol(utilityProtocol).SetManager(globals.UtilityManager)
 
 	port, err := strconv.Atoi(os.Getenv("PN_TRA_SECURE_PORT"))
@@ -131,5 +117,5 @@ func StartSecureServer() {
 	}
 
 	globals.Logger.Successf("[TRA] Secure server listening on UDP %d", port)
-	SecureServer.Listen(port)
+	globals.SecureServer.Listen(port)
 }
