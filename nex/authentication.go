@@ -13,30 +13,27 @@ import (
 	"github.com/Protarium-Network/terraria-nex/globals"
 )
 
-var AuthenticationServer *nex.PRUDPServer
-var AuthenticationEndpoint *nex.PRUDPEndPoint
-
 func StartAuthenticationServer() {
-	AuthenticationServer = nex.NewPRUDPServer()
+	globals.AuthenticationServer = nex.NewPRUDPServer()
 
-	// Wrong value = 106-0502 / endless CONNECT retransmit. Most 3.4.13 titles
-	// on this stack need false; flip with =1.
-	// LegacyConnectionSignature=True if the NEX version is lower than 3.2.0
-	AuthenticationServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
+	// Wrong value = 106-0502 / endless CONNECT retransmit.
+	// LegacyConnectionSignature are only used if the NEX version is lower than 3.2.0.
+	// Terraria is NEX 3.8.3, so it must be false.
+	globals.AuthenticationServer.PRUDPV1Settings.LegacyConnectionSignature = globals.LegacyConnectionSignature
 
-	AuthenticationEndpoint = nex.NewPRUDPEndPoint(1)
-	AuthenticationEndpoint.ServerAccount = globals.AuthenticationServerAccount
-	AuthenticationEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
-	AuthenticationEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
-	AuthenticationServer.BindPRUDPEndPoint(AuthenticationEndpoint)
+	globals.AuthenticationEndpoint = nex.NewPRUDPEndPoint(1)
+	globals.AuthenticationEndpoint.ServerAccount = globals.AuthenticationServerAccount
+	globals.AuthenticationEndpoint.AccountDetailsByPID = globals.AccountDetailsByPID
+	globals.AuthenticationEndpoint.AccountDetailsByUsername = globals.AccountDetailsByUsername
+	globals.AuthenticationServer.BindPRUDPEndPoint(globals.AuthenticationEndpoint)
 
-	AuthenticationServer.LibraryVersions.SetDefault(nex.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
-	AuthenticationServer.AccessKey = globals.AccessKey
+	globals.AuthenticationServer.LibraryVersions.SetDefault(nex.NewLibraryVersion(globals.NEXMajor, globals.NEXMinor, globals.NEXPatch))
+	globals.AuthenticationServer.AccessKey = globals.AccessKey
 
-	// UseStructureHeader=True if the NEX version is lower than 3.3.0
-	AuthenticationServer.ByteStreamSettings.UseStructureHeader = true
+	// StructureHeaders are used by NEX 3.5.0 and newer (Terraria is 3.8.3).
+	globals.AuthenticationServer.ByteStreamSettings.UseStructureHeader = true
 
-	AuthenticationEndpoint.OnData(func(packet nex.PacketInterface) {
+	globals.AuthenticationEndpoint.OnData(func(packet nex.PacketInterface) {
 		request := packet.RMCMessage()
 		if request == nil {
 			return
@@ -46,7 +43,7 @@ func StartAuthenticationServer() {
 	})
 
 	ticketGrantingProtocol := ticket_granting.NewProtocol()
-	AuthenticationEndpoint.RegisterServiceProtocol(ticketGrantingProtocol)
+	globals.AuthenticationEndpoint.RegisterServiceProtocol(ticketGrantingProtocol)
 	commonTicketGrantingProtocol := common_ticket_granting.NewCommonProtocol(ticketGrantingProtocol)
 
 	securePort, _ := strconv.Atoi(os.Getenv("PN_TRA_SECURE_PORT"))
@@ -75,5 +72,5 @@ func StartAuthenticationServer() {
 
 	port, _ := strconv.Atoi(os.Getenv("PN_TRA_AUTH_PORT"))
 	globals.Logger.Successf("[TRA] Authentication server listening on UDP %d", port)
-	AuthenticationServer.Listen(port)
+	globals.AuthenticationServer.Listen(port)
 }

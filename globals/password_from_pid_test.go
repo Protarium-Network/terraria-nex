@@ -42,7 +42,7 @@ func TestPasswordFromPIDLocalReadsSettings(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"accounts":[{"username":"42","password":"hunter2"}]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PN_NAN_SETTINGS_PATH", path)
+	t.Setenv("PN_TRA_SETTINGS_PATH", path)
 
 	if got, code := PasswordFromPID(types.NewPID(42)); code != 0 || got != "hunter2" {
 		t.Fatalf("got (%q, %d), want (\"hunter2\", 0)", got, code)
